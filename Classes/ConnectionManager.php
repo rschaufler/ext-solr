@@ -27,13 +27,10 @@ namespace ApacheSolrForTypo3\Solr;
 use ApacheSolrForTypo3\Solr\Domain\Site\Site;
 use ApacheSolrForTypo3\Solr\Domain\Site\SiteRepository;
 use ApacheSolrForTypo3\Solr\System\Logging\SolrLogManager;
-use ApacheSolrForTypo3\Solr\System\Page\Rootline;
 use ApacheSolrForTypo3\Solr\System\Records\Pages\PagesRepository as PagesRepositoryAtExtSolr;
 use ApacheSolrForTypo3\Solr\System\Records\SystemLanguage\SystemLanguageRepository;
 use ApacheSolrForTypo3\Solr\System\Solr\Node;
 use ApacheSolrForTypo3\Solr\System\Solr\SolrConnection;
-use TYPO3\CMS\Backend\Routing\UriBuilder;
-use TYPO3\CMS\Backend\Toolbar\ClearCacheActionsHookInterface;
 use TYPO3\CMS\Core\Registry;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\TypoScript\ExtendedTemplateService;
@@ -41,10 +38,7 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Frontend\Page\PageRepository;
 
 /**
- * A class to easily create a connection to a Solr server.
- *
- * Internally keeps track of already existing connections and makes sure that no
- * duplicate connections are created.
+ * ConnectionManager is responsible to create SolrConnection objects.
  *
  * @author Ingo Renner <ingo@typo3.org>
  */
@@ -62,11 +56,6 @@ class ConnectionManager implements SingletonInterface
     protected $systemLanguageRepository;
 
     /**
-     * @var \ApacheSolrForTypo3\Solr\System\Logging\SolrLogManager
-     */
-    protected $logger = null;
-
-    /**
      * @var PagesRepositoryAtExtSolr
      */
     protected $pagesRepositoryAtExtSolr;
@@ -79,14 +68,13 @@ class ConnectionManager implements SingletonInterface
     /**
      * @param SystemLanguageRepository $systemLanguageRepository
      * @param PagesRepositoryAtExtSolr|null $pagesRepositoryAtExtSolr
-     * @param SolrLogManager $solrLogManager
+     * @param SiteRepository $siteRepository
      */
-    public function __construct(SystemLanguageRepository $systemLanguageRepository = null, PagesRepositoryAtExtSolr $pagesRepositoryAtExtSolr = null, SolrLogManager $solrLogManager = null, SiteRepository $siteRepository = null)
+    public function __construct(SystemLanguageRepository $systemLanguageRepository = null, PagesRepositoryAtExtSolr $pagesRepositoryAtExtSolr = null, SiteRepository $siteRepository = null)
     {
         $this->systemLanguageRepository = $systemLanguageRepository ?? GeneralUtility::makeInstance(SystemLanguageRepository::class);
         $this->siteRepository           = $siteRepository ?? GeneralUtility::makeInstance(SiteRepository::class);
         $this->pagesRepositoryAtExtSolr = $pagesRepositoryAtExtSolr ?? GeneralUtility::makeInstance(PagesRepositoryAtExtSolr::class);
-        $this->logger                   = $solrLogManager ?? GeneralUtility::makeInstance(SolrLogManager::class, /** @scrutinizer ignore-type */ __CLASS__);
     }
 
     /**
@@ -128,33 +116,24 @@ class ConnectionManager implements SingletonInterface
      * @param int $pageId A page ID.
      * @param int $language The language ID to get the connection for as the path may differ. Optional, defaults to 0.
      * @param string $mount Comma list of MountPoint parameters
+     * @deprecated will be removed in v11, use Site object/SiteRepository directly
      * @return array A solr configuration.
      * @throws NoSolrConnectionFoundException
      */
     public function getConfigurationByPageId($pageId, $language = 0, $mount = '')
     {
-        // find the root page
-        $pageSelect = GeneralUtility::makeInstance(PageRepository::class);
-
-        /** @var Rootline $rootLine */
-        $rootLine = GeneralUtility::makeInstance(Rootline::class, /** @scrutinizer ignore-type */ $pageSelect->getRootLine($pageId, $mount));
-        $siteRootPageId = $rootLine->getRootPageId();
-
         try {
-            $solrConfiguration = $this->getConfigurationByRootPageId($siteRootPageId, $language);
-        } catch (NoSolrConnectionFoundException $nscfe) {
-            /* @var $noSolrConnectionException NoSolrConnectionFoundException */
+            $site = $this->siteRepository->getSiteByPageId($pageId, $mount);
+            return $site->getSolrConnectionConfiguration($language);
+        } catch(\InvalidArgumentException $e) {
             $noSolrConnectionException = GeneralUtility::makeInstance(
                 NoSolrConnectionFoundException::class,
-                /** @scrutinizer ignore-type */ $nscfe->getMessage() . ' Initial page used was [' . $pageId . ']',
-                /** @scrutinizer ignore-type */ 1275399922
+                /** @scrutinizer ignore-type */  'Could not find a Solr connection for page [' . $pageId. '] and language [' . $language . '].',
+                /** @scrutinizer ignore-type */ 1575396474
             );
-            $noSolrConnectionException->setPageId($pageId);
-
+            $noSolrConnectionException->setLanguageId($language);
             throw $noSolrConnectionException;
         }
-
-        return $solrConfiguration;
     }
 
     /**
@@ -168,10 +147,21 @@ class ConnectionManager implements SingletonInterface
      */
     public function getConnectionByPageId($pageId, $language = 0, $mount = '')
     {
+        try {
+            $site = $this->siteRepository->getSiteByPageId($pageId, $mount);
+            $config = $site->getSolrConnectionConfiguration($language);
+            $solrConnection = $this->getConnectionFromConfiguration($config);
 
-        $solrConnections = $this->getConfigurationByPageId($pageId, $language, $mount);
-        $solrConnection = $this->getConnectionFromConfiguration($solrConnections);
-        return $solrConnection;
+            return $solrConnection;
+        } catch(\InvalidArgumentException $e) {
+            $noSolrConnectionException = GeneralUtility::makeInstance(
+                NoSolrConnectionFoundException::class,
+                /** @scrutinizer ignore-type */  'Could not find a Solr connection for page [' . $pageId. '] and language [' . $language . '].',
+                /** @scrutinizer ignore-type */ 1575396474
+            );
+            $noSolrConnectionException->setLanguageId($language);
+            throw $noSolrConnectionException;
+        }
     }
 
     /**
@@ -185,9 +175,18 @@ class ConnectionManager implements SingletonInterface
      */
     public function getConfigurationByRootPageId($pageId, $language = 0)
     {
-        $site = $this->siteRepository->getSiteByRootPageId($pageId);
-
-        return $site->getSolrConnectionConfiguration($language);
+        try {
+            $site = $this->siteRepository->getSiteByRootPageId($pageId);
+            return $site->getSolrConnectionConfiguration($language);
+        } catch(\InvalidArgumentException $e) {
+            $noSolrConnectionException = GeneralUtility::makeInstance(
+                NoSolrConnectionFoundException::class,
+                /** @scrutinizer ignore-type */  'Could not find a Solr connection for page [' . $pageId. '] and language [' . $language . '].',
+                /** @scrutinizer ignore-type */ 1575396474
+            );
+            $noSolrConnectionException->setLanguageId($language);
+            throw $noSolrConnectionException;
+        }
     }
 
     /**
@@ -200,10 +199,20 @@ class ConnectionManager implements SingletonInterface
      */
     public function getConnectionByRootPageId($pageId, $language = 0)
     {
-        $config = $this->getConfigurationByRootPageId($pageId, $language);
-        $solrConnection = $this->getConnectionFromConfiguration($config);
-
-        return $solrConnection;
+        try {
+            $site = $this->siteRepository->getSiteByRootPageId($pageId);
+            $config = $site->getSolrConnectionConfiguration($language);
+            $solrConnection = $this->getConnectionFromConfiguration($config);
+            return $solrConnection;
+        } catch (\InvalidArgumentException $e) {
+            $noSolrConnectionException = GeneralUtility::makeInstance(
+                NoSolrConnectionFoundException::class,
+                /** @scrutinizer ignore-type */  'Could not find a Solr connection for page [' . $pageId. '] and language [' . $language . '].',
+                /** @scrutinizer ignore-type */ 1875396474
+            );
+            $noSolrConnectionException->setLanguageId($language);
+            throw $noSolrConnectionException;
+        }
     }
 
     /**
@@ -241,7 +250,6 @@ class ConnectionManager implements SingletonInterface
      * Gets all connections found.
      *
      * @return SolrConnection[] An array of initialized ApacheSolrForTypo3\Solr\System\Solr\SolrConnection connections
-     * @deprecated will be removed in v11, use SiteRepository
      */
     public function getAllConnections()
     {
@@ -272,7 +280,6 @@ class ConnectionManager implements SingletonInterface
      *
      * @param Site $site A TYPO3 site
      * @return SolrConnection[] An array of Solr connection objects (ApacheSolrForTypo3\Solr\System\Solr\SolrConnection)
-     * @deprecated will be removed in v11, use $site->getAllSolrConnectionConfigurations()
      */
     public function getConnectionsBySite(Site $site)
     {
@@ -431,8 +438,6 @@ class ConnectionManager implements SingletonInterface
         $connection['label'] = $this->buildConnectionLabel($connection);
         return $connection;
     }
-
-
 
     /**
      * Creates a human readable label from the connections' configuration.

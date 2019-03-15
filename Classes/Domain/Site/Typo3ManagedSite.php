@@ -2,11 +2,28 @@
 
 namespace ApacheSolrForTypo3\Solr\Domain\Site;
 
-/*
- * This source file is proprietary property of Beech Applications B.V.
- * Date: 13-3-19
- * All code (c) Beech Applications B.V. all rights reserved
- */
+/***************************************************************
+ *  Copyright notice
+ *
+ *  (c) 2019 Frans Saris <frans.saris@beech.it> & Timo Hund <timo.hund@dkd.de>
+ *  All rights reserved
+ *
+ *  This script is part of the TYPO3 project. The TYPO3 project is
+ *  free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  The GNU General Public License can be found at
+ *  http://www.gnu.org/copyleft/gpl.html.
+ *
+ *  This script is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  This copyright notice MUST APPEAR in all copies of the script!
+ ***************************************************************/
 
 use ApacheSolrForTypo3\Solr\NoSolrConnectionFoundException;
 use ApacheSolrForTypo3\Solr\System\Configuration\TypoScriptConfiguration;
@@ -14,6 +31,10 @@ use ApacheSolrForTypo3\Solr\System\Records\Pages\PagesRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Site\Entity\Site as Typo3Site;
 
+/**
+ * Class Typo3ManagedSite
+ * @package ApacheSolrForTypo3\Solr\Domain\Site
+ */
 class Typo3ManagedSite extends Site
 {
 
@@ -43,9 +64,13 @@ class Typo3ManagedSite extends Site
         $this->typo3SiteObject = $typo3SiteObject;
     }
 
+    /**
+     * @param int $languageUid
+     * @return string
+     */
     public function getSysLanguageMode($languageUid = 0)
     {
-        // TODO: Implement getSysLanguageMode() method.
+        return $this->typo3SiteObject->getLanguageById($languageUid)->getFallbackType();
     }
 
     /**
