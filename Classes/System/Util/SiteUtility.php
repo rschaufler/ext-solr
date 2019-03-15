@@ -57,13 +57,33 @@ class SiteUtility
         return $site instanceof Site;
     }
 
+    /**
+     * This method is used to retrieve the connection configuration from the TYPO3 site configuration.
+     *
+     * The configuration is done in the globals configuration of a site, and be extended in the language specific configuration
+     * of a site.
+     *
+     * Typically everything except the core name is configured on the global level and the core name differs for each language.
+     *
+     * In addition every property can be defined for the ```read``` and ```write``` scope.
+     *
+     * The convension for propery keys is "solr_{propertyName}_{scope}". With the configuration "solr_host_read" you define the host
+     * for the solr read connection.
+     *
+     * @param Site $typo3Site
+     * @param $property
+     * @param $languageId
+     * @param $scope
+     * @param null $defaultValue
+     * @return string
+     */
     public static function getConnectionProperty(Site $typo3Site, $property, $languageId, $scope, $defaultValue = null): string
     {
 
         // convention kez solr_$property_$scope
         $keyToCheck = 'solr_' . $property . '_' . $scope;
 
-        // convention fallback kez solr_$property_read
+        // convention fallback key solr_$property_read
         $fallbackKey = 'solr_' . $property . '_read';
 
         // try to find language specific setting if found return it

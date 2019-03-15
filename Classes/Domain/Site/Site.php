@@ -32,6 +32,11 @@ use ApacheSolrForTypo3\Solr\System\Records\Pages\PagesRepository;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
+/**
+ * Base Clas for Typo3ManagedSite and LegacySite
+ *
+ * @package ApacheSolrForTypo3\Solr\Domain\Site
+ */
 abstract class Site implements SiteInterface
 {
     /**
@@ -69,18 +74,6 @@ abstract class Site implements SiteInterface
      * @var int[] Available language ids
      */
     protected $availableLanguageIds = [];
-
-    /**
-     * Gets the site's config.sys_language_mode setting
-     *
-     * @param int $languageUid
-     *
-     * @return string The site's config.sys_language_mode
-     */
-    public function getSysLanguageMode($languageUid = 0)
-    {
-        return null;
-    }
 
     /**
      * Takes an pagerecord and checks whether the page is marked as root page.

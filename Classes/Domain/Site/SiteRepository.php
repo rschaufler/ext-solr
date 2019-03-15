@@ -75,8 +75,7 @@ class SiteRepository
     public function __construct(RootPageResolver $rootPageResolver = null, TwoLevelCache $twoLevelCache = null, Registry $registry = null)
     {
         $this->rootPageResolver = $rootPageResolver ?? GeneralUtility::makeInstance(RootPageResolver::class);
-        $this->runtimeCache = $twoLevelCache ?? GeneralUtility::makeInstance(TwoLevelCache::class, /** @scrutinizer ignore-type */
-                'cache_runtime');
+        $this->runtimeCache = $twoLevelCache ?? GeneralUtility::makeInstance(TwoLevelCache::class, /** @scrutinizer ignore-type */'cache_runtime');
         $this->registry = $registry ?? GeneralUtility::makeInstance(Registry::class);
     }
 
@@ -85,7 +84,7 @@ class SiteRepository
      *
      * @param int $pageId The page Id to get a Site object for.
      * @param string $mountPointIdentifier
-     * @return Site Site for the given page Id.
+     * @return SiteInterface Site for the given page Id.
      */
     public function getSiteByPageId($pageId, $mountPointIdentifier = '')
     {
@@ -97,7 +96,7 @@ class SiteRepository
      * Gets the Site for a specific root page Id.
      *
      * @param int $rootPageId Root page Id to get a Site object for.
-     * @return Site Site for the given page Id.
+     * @return SiteInterface Site for the given page Id.
      */
     public function getSiteByRootPageId($rootPageId)
     {
@@ -199,6 +198,8 @@ class SiteRepository
         $rootPageRecord = (array)BackendUtility::getRecord('pages', $rootPageId);
 
         $this->validateRootPageRecord($rootPageId, $rootPageRecord);
+
+        //@todo The handling of the legacy site can be removed in EXT:solr 11
         if (!SiteUtility::getIsSiteManagedSite($rootPageId)) {
             return $this->buildLegacySite($rootPageRecord);
         }
@@ -229,6 +230,7 @@ class SiteRepository
     /**
      * Retrieves the configured solr servers from the registry.
      *
+     * @deprecated This method is only required for old solr based sites.
      * @return array
      */
     protected function getSolrServersFromRegistry()
@@ -239,6 +241,7 @@ class SiteRepository
 
     /**
      * @param $rootPageId
+     * @deprecated This method is only required for old solr based sites.
      * @return NULL|string
      */
     protected function getDomainFromConfigurationOrFallbackToDomainRecord($rootPageId)
@@ -337,7 +340,7 @@ class SiteRepository
         $siteHash = $this->getSiteHashForDomain($domain);
         $defaultLanguage = $typo3Site->getDefaultLanguage()->getLanguageId();
         $pageRepository = GeneralUtility::makeInstance(PagesRepository::class);
-        $availableLanguageIds = array_map(function ($language) {
+        $availableLanguageIds = array_map(function($language) {
             return $language->getLanguageId();
         }, $typo3Site->getAllLanguages());
 
@@ -352,7 +355,9 @@ class SiteRepository
                     'host' => SiteUtility::getConnectionProperty($typo3Site, 'host', $languageUid, 'read', 'localhost'),
                     'port' => (int)SiteUtility::getConnectionProperty($typo3Site, 'port', $languageUid, 'read', 8983),
                     // @todo: transform core to path
-                    'path' => SiteUtility::getConnectionProperty($typo3Site, 'core', $languageUid, 'read', '/solr/core_en/'),
+                    'path' =>
+                        SiteUtility::getConnectionProperty($typo3Site, 'path', $languageUid, 'read', '/solr/') .
+                        SiteUtility::getConnectionProperty($typo3Site, 'core', $languageUid, 'read', 'core_en') . '/' ,
                     'username' => SiteUtility::getConnectionProperty($typo3Site, 'username', $languageUid, 'read', ''),
                     'password' => SiteUtility::getConnectionProperty($typo3Site, 'password', $languageUid, 'read', ''),
                     'timeout' => SiteUtility::getConnectionProperty($typo3Site, 'timeout', $languageUid, 'read', 0)
@@ -362,7 +367,9 @@ class SiteRepository
                     'host' => SiteUtility::getConnectionProperty($typo3Site, 'host', $languageUid, 'write', 'localhost'),
                     'port' => (int)SiteUtility::getConnectionProperty($typo3Site, 'port', $languageUid, 'write', 8983),
                     // @todo: transform core to path
-                    'path' => SiteUtility::getConnectionProperty($typo3Site, 'core', $languageUid, 'write', '/solr/core_en/'),
+                    'path' =>
+                        SiteUtility::getConnectionProperty($typo3Site, 'path', $languageUid, 'read', '/solr/') .
+                        SiteUtility::getConnectionProperty($typo3Site, 'core', $languageUid, 'read', 'core_en') . '/' ,
                     'username' => SiteUtility::getConnectionProperty($typo3Site, 'username', $languageUid, 'write', ''),
                     'password' => SiteUtility::getConnectionProperty($typo3Site, 'password', $languageUid, 'write', ''),
                     'timeout' => SiteUtility::getConnectionProperty($typo3Site, 'timeout', $languageUid, 'write', 0)
